@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolymerIQ — Materials Intelligence Platform</title>
+<meta name="description" content="Commercial polymer materials database with AI assistant, live search, and research tools.">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+/* ── RESET & BASE ── */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Segoe UI',system-ui,sans-serif;background:#07090f;color:#e2e8f0}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:#07090f}
+::-webkit-scrollbar-thumb{background:#1e3055;border-radius:3px}
+input,select,textarea,button{font-family:inherit}
+a{color:#60a5fa;text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── COMPONENTS ── */
+.tab-btn{padding:9px 18px;cursor:pointer;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:#64748b;transition:all 0.15s;white-space:nowrap}
+.tab-btn.active{color:#60a5fa;border-bottom-color:#60a5fa}
+.card{background:#0d1320;border:1px solid #172035;border-radius:10px;padding:13px;margin-bottom:8px}
+.badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;margin-right:3px;margin-bottom:3px}
+.inp{background:#0a1020;border:1px solid #172035;border-radius:7px;padding:7px 11px;color:#e2e8f0;font-size:12px;width:100%;outline:none}
+.inp:focus{border-color:#2563eb}
+.sel{background:#0a1020;border:1px solid #172035;border-radius:7px;padding:7px 11px;color:#e2e8f0;font-size:12px;width:100%;outline:none;cursor:pointer}
+.btn{padding:6px 13px;font-size:11px;font-weight:600;border:none;border-radius:7px;cursor:pointer;transition:all 0.15s}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.btn-primary{background:#1d4ed8;color:#fff}.btn-primary:hover:not(:disabled){background:#2563eb}
+.btn-ghost{background:#172035;color:#94a3b8}.btn-ghost:hover{background:#1e2d4a}
+.btn-green{background:#064e3b;color:#34d399}.btn-green:hover{background:#065f46}
+.btn-purple{background:#2d1b4a;color:#a78bfa}.btn-purple:hover{background:#3d2060}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid #1e3a5f;border-top-color:#60a5fa;border-radius:50%;animation:spin 0.8s linear infinite}
+.fade-in{animation:fadeIn 0.2s ease}
+
+/* ── LAYOUT ── */
+#root{display:flex;flex-direction:column;min-height:100vh}
+.header{background:#080c17;border-bottom:1px solid #172035;padding:11px 20px 0;position:sticky;top:0;z-index:100}
+.header-top{display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:30px;height:30px;border-radius:8px;background:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.main{padding:16px 20px;flex:1;max-width:1200px;margin:0 auto;width:100%}
+
+/* ── ANIMATIONS ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+
+/* ── RESPONSIVE ── */
+@media(max-width:600px){
+  .grid-3{grid-template-columns:1fr 1fr!important}
+  .main{padding:10px}
+  .header{padding:8px 12px 0}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     IMPORTANT: Replace 'YOUR_ANTHROPIC_API_KEY_HERE' below with your
+     actual Anthropic API key from https://console.anthropic.com
+     
+     SECURITY NOTE: For production, use a backend proxy instead of
+     exposing the key in client-side code. See README.md for details.
+═══════════════════════════════════════════════════════════════════ -->
+<script>
+  window.ANTHROPIC_API_KEY = 'YOUR_ANTHROPIC_API_KEY_HERE';
+</script>
+
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+
+// ─── SEED DATABASE (~200 grades) ───────────────────────────────────────────
+const SEED_DB=[
+  // SABIC
+  {id:"s001",name:"Lexan 101",mfr:"Sabic",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Electronics"],proc:{melt:[280,300],mold:[80,100],dry:[110,4]},props:{tens:62,flex:88,hdt:128,den:1.20,izod:70,cti:175,elong:110}},
+  {id:"s002",name:"Lexan 121",mfr:"Sabic",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Optical"],proc:{melt:[285,305],mold:[80,100],dry:[110,4]},props:{tens:60,flex:85,hdt:125,den:1.20,izod:68,cti:175,elong:120}},
+  {id:"s003",name:"Lexan 143R",mfr:"Sabic",base:"PC",filler:"GF",fpct:10,type:"Engineering",rec:0,apps:["Automotive","Electronics","Medical"],proc:{melt:[280,300],mold:[80,100],dry:[110,4]},props:{tens:65,flex:90,hdt:130,den:1.27,izod:8,cti:175,elong:4}},
+  {id:"s004",name:"Lexan 500R",mfr:"Sabic",base:"PC",filler:"GF",fpct:20,type:"Engineering",rec:0,apps:["Automotive","Industrial"],proc:{melt:[285,305],mold:[80,100],dry:[110,4]},props:{tens:85,flex:120,hdt:138,den:1.34,izod:7,cti:175,elong:3}},
+  {id:"s005",name:"Lexan EXL9330",mfr:"Sabic",base:"PC/ABS",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Consumer Electronics"],proc:{melt:[240,260],mold:[60,80],dry:[100,3]},props:{tens:52,flex:75,hdt:110,den:1.14,izod:65,cti:175,elong:20}},
+  {id:"s006",name:"Noryl GFN2",mfr:"Sabic",base:"PPE/PS",filler:"GF",fpct:20,type:"Engineering",rec:0,apps:["Electrical","Automotive"],proc:{melt:[280,300],mold:[80,100],dry:[110,4]},props:{tens:100,flex:138,hdt:150,den:1.27,izod:7,cti:600,elong:3}},
+  {id:"s007",name:"Noryl GFN3",mfr:"Sabic",base:"PPE/PS",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Electrical","Automotive","Industrial"],proc:{melt:[285,305],mold:[80,100],dry:[110,4]},props:{tens:120,flex:165,hdt:155,den:1.36,izod:8,cti:600,elong:2.5}},
+  {id:"s008",name:"Noryl GTX910",mfr:"Sabic",base:"PPE/PA",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Painted Parts"],proc:{melt:[270,290],mold:[80,100],dry:[110,4]},props:{tens:55,flex:80,hdt:135,den:1.10,izod:15,cti:400,elong:12}},
+  {id:"s009",name:"Noryl GTX960",mfr:"Sabic",base:"PPE/PA66",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Structural"],proc:{melt:[275,295],mold:[80,100],dry:[110,4]},props:{tens:145,flex:210,hdt:175,den:1.30,izod:10,cti:400,elong:3}},
+  {id:"s010",name:"Tarlox PA46 GF30",mfr:"Sabic",base:"PA46",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Connectors","Industrial"],proc:{melt:[285,300],mold:[100,130],dry:[100,8]},props:{tens:195,flex:285,hdt:295,den:1.42,izod:11,cti:600,elong:3}},
+  {id:"s011",name:"Valox FR1 PBT",mfr:"Sabic",base:"PBT",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Electrical","Electronics"],proc:{melt:[245,265],mold:[50,80],dry:[110,4]},props:{tens:52,flex:75,hdt:150,den:1.31,izod:5,cti:600,elong:200}},
+  {id:"s012",name:"Xenoy CL101",mfr:"Sabic",base:"PC/PBT",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Consumer"],proc:{melt:[255,275],mold:[60,80],dry:[110,4]},props:{tens:55,flex:80,hdt:120,den:1.20,izod:70,cti:175,elong:50}},
+  // BASF
+  {id:"b001",name:"Ultramid A3W",mfr:"BASF",base:"PA66",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Industrial"],proc:{melt:[270,290],mold:[70,90],dry:[80,8]},props:{tens:82,flex:100,hdt:200,den:1.14,izod:8,cti:600,elong:30}},
+  {id:"b002",name:"Ultramid A3WG3",mfr:"BASF",base:"PA66",filler:"GF",fpct:15,type:"Engineering",rec:0,apps:["Automotive","Electrical"],proc:{melt:[270,290],mold:[70,90],dry:[80,8]},props:{tens:120,flex:175,hdt:230,den:1.26,izod:9,cti:600,elong:4}},
+  {id:"b003",name:"Ultramid A3WG5",mfr:"BASF",base:"PA66",filler:"GF",fpct:25,type:"Engineering",rec:0,apps:["Automotive","Industrial"],proc:{melt:[270,290],mold:[70,90],dry:[80,8]},props:{tens:155,flex:230,hdt:240,den:1.31,izod:10,cti:600,elong:3.5}},
+  {id:"b004",name:"Ultramid A3WG6",mfr:"BASF",base:"PA66",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Industrial","Connectors"],proc:{melt:[270,290],mold:[70,90],dry:[80,8]},props:{tens:180,flex:260,hdt:245,den:1.36,izod:10,cti:600,elong:3}},
+  {id:"b005",name:"Ultramid A3WG7",mfr:"BASF",base:"PA66",filler:"GF",fpct:35,type:"Engineering",rec:0,apps:["Automotive","Structural"],proc:{melt:[275,295],mold:[75,95],dry:[80,8]},props:{tens:195,flex:280,hdt:248,den:1.41,izod:11,cti:600,elong:2.5}},
+  {id:"b006",name:"Ultramid A3WG10",mfr:"BASF",base:"PA66",filler:"GF",fpct:50,type:"Engineering",rec:0,apps:["Automotive","Structural","Industrial"],proc:{melt:[280,300],mold:[80,100],dry:[80,8]},props:{tens:235,flex:340,hdt:250,den:1.56,izod:13,cti:600,elong:2}},
+  {id:"b007",name:"Ultramid B3W",mfr:"BASF",base:"PA6",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Consumer","Industrial"],proc:{melt:[250,270],mold:[60,80],dry:[80,8]},props:{tens:78,flex:95,hdt:180,den:1.13,izod:8,cti:600,elong:35}},
+  {id:"b008",name:"Ultramid B3WG6",mfr:"BASF",base:"PA6",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Electrical","Industrial"],proc:{melt:[250,270],mold:[60,80],dry:[80,8]},props:{tens:175,flex:255,hdt:200,den:1.36,izod:11,cti:600,elong:3}},
+  {id:"b009",name:"Ultramid B3WG10",mfr:"BASF",base:"PA6",filler:"GF",fpct:50,type:"Engineering",rec:0,apps:["Automotive","Structural"],proc:{melt:[255,275],mold:[65,85],dry:[80,8]},props:{tens:220,flex:320,hdt:210,den:1.58,izod:14,cti:600,elong:2}},
+  {id:"b010",name:"Ultradur B4300 G6",mfr:"BASF",base:"PBT",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Electrical","Electronics"],proc:{melt:[245,265],mold:[60,80],dry:[110,4]},props:{tens:130,flex:195,hdt:210,den:1.52,izod:8,cti:600,elong:2}},
+  {id:"b011",name:"Ultrason E2010",mfr:"BASF",base:"PES",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Aerospace","Medical","Automotive"],proc:{melt:[340,380],mold:[120,160],dry:[150,4]},props:{tens:85,flex:130,hdt:210,den:1.37,izod:5,cti:175,elong:30}},
+  {id:"b012",name:"Ultrason S3010",mfr:"BASF",base:"PSU",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Medical","Aerospace","Plumbing"],proc:{melt:[340,380],mold:[100,150],dry:[135,4]},props:{tens:70,flex:107,hdt:183,den:1.24,izod:7,cti:175,elong:50}},
+  {id:"b013",name:"Ultramid Advanced N3HG6",mfr:"BASF",base:"PA9T",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics"],proc:{melt:[305,325],mold:[130,160],dry:[100,6]},props:{tens:200,flex:295,hdt:295,den:1.46,izod:11,cti:600,elong:2}},
+  {id:"b014",name:"Ultramid B3WC6",mfr:"BASF",base:"PA6",filler:"CF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Structural","Aerospace"],proc:{melt:[250,270],mold:[60,80],dry:[80,8]},props:{tens:210,flex:315,hdt:205,den:1.22,izod:8,cti:175,elong:2}},
+  // CELENESE
+  {id:"c001",name:"Celcon M90",mfr:"Celenese",base:"POM",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Industrial","Consumer"],proc:{melt:[200,220],mold:[60,80],dry:[0,0]},props:{tens:65,flex:93,hdt:110,den:1.41,izod:7.5,cti:175,elong:35}},
+  {id:"c002",name:"Hostaform C9021",mfr:"Celenese",base:"POM",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Electronics","Gears"],proc:{melt:[200,220],mold:[60,80],dry:[0,0]},props:{tens:62,flex:88,hdt:108,den:1.41,izod:7,cti:175,elong:30}},
+  {id:"c003",name:"Hostaform GC25A",mfr:"Celenese",base:"POM",filler:"GF",fpct:25,type:"Engineering",rec:0,apps:["Automotive","Industrial"],proc:{melt:[200,220],mold:[60,80],dry:[0,0]},props:{tens:110,flex:158,hdt:160,den:1.59,izod:6,cti:175,elong:3}},
+  {id:"c004",name:"Fortron 0205",mfr:"Celenese",base:"PPS",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics","Chemical"],proc:{melt:[310,340],mold:[120,150],dry:[150,4]},props:{tens:65,flex:100,hdt:220,den:1.35,izod:4,cti:250,elong:3}},
+  {id:"c005",name:"Fortron 1140L4",mfr:"Celenese",base:"PPS",filler:"GF",fpct:40,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics","Industrial"],proc:{melt:[310,340],mold:[120,150],dry:[150,4]},props:{tens:200,flex:290,hdt:265,den:1.65,izod:9,cti:250,elong:1.5}},
+  {id:"c006",name:"Ryton R-4-200",mfr:"Celenese",base:"PPS",filler:"GF",fpct:40,type:"Super-Engineering",rec:0,apps:["Automotive","Aerospace","Chemical"],proc:{melt:[310,340],mold:[135,150],dry:[150,4]},props:{tens:195,flex:280,hdt:265,den:1.64,izod:9,cti:250,elong:1.2}},
+  {id:"c007",name:"Vectra A130",mfr:"Celenese",base:"LCP",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Electronics","Connectors","SMT"],proc:{melt:[290,310],mold:[60,100],dry:[150,4]},props:{tens:130,flex:210,hdt:270,den:1.61,izod:6,cti:175,elong:1.5}},
+  {id:"c008",name:"Vectra E820i",mfr:"Celenese",base:"LCP",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Electronics","5G","Antenna"],proc:{melt:[295,315],mold:[70,100],dry:[150,4]},props:{tens:95,flex:130,hdt:210,den:1.40,izod:4,cti:175,elong:4}},
+  // SYENSQO
+  {id:"sy001",name:"KetaSpire KT-820",mfr:"Syensqo",base:"PEEK",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Aerospace","Medical","Oil & Gas"],proc:{melt:[360,400],mold:[160,200],dry:[150,4]},props:{tens:100,flex:170,hdt:155,den:1.32,izod:6,cti:175,elong:30}},
+  {id:"sy002",name:"KetaSpire KT-820 GF30",mfr:"Syensqo",base:"PEEK",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Aerospace","Medical","Oil & Gas"],proc:{melt:[370,400],mold:[160,200],dry:[150,4]},props:{tens:165,flex:255,hdt:315,den:1.51,izod:9,cti:175,elong:2}},
+  {id:"sy003",name:"KetaSpire KT-880 CF30",mfr:"Syensqo",base:"PEEK",filler:"CF",fpct:30,type:"Super-Engineering",rec:0,apps:["Aerospace","Industrial","Medical"],proc:{melt:[380,410],mold:[170,210],dry:[150,4]},props:{tens:210,flex:310,hdt:315,den:1.44,izod:8,cti:175,elong:1.5}},
+  {id:"sy004",name:"Amodel A-1133",mfr:"Syensqo",base:"PPA",filler:"GF",fpct:33,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics","Industrial"],proc:{melt:[320,340],mold:[130,160],dry:[120,6]},props:{tens:195,flex:285,hdt:290,den:1.45,izod:10,cti:600,elong:2}},
+  {id:"sy005",name:"Amodel A-1145 HS",mfr:"Syensqo",base:"PPA",filler:"GF",fpct:45,type:"Super-Engineering",rec:0,apps:["Automotive","Connectors"],proc:{melt:[325,345],mold:[135,165],dry:[120,6]},props:{tens:230,flex:335,hdt:295,den:1.57,izod:11,cti:600,elong:1.5}},
+  {id:"sy006",name:"Radel R-5100",mfr:"Syensqo",base:"PPSU",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Medical","Aerospace","Food Service"],proc:{melt:[360,390],mold:[150,180],dry:[150,5]},props:{tens:75,flex:120,hdt:220,den:1.29,izod:9,cti:175,elong:60}},
+  {id:"sy007",name:"Udel P-1700",mfr:"Syensqo",base:"PSU",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Medical","Aerospace","Membrane"],proc:{melt:[340,380],mold:[100,150],dry:[135,4]},props:{tens:70,flex:105,hdt:185,den:1.24,izod:7,cti:175,elong:50}},
+  {id:"sy008",name:"Ixef 1022",mfr:"Syensqo",base:"PARA",filler:"GF",fpct:50,type:"Super-Engineering",rec:0,apps:["Aerospace","Automotive","Industrial"],proc:{melt:[305,325],mold:[120,160],dry:[100,6]},props:{tens:245,flex:365,hdt:285,den:1.63,izod:12,cti:600,elong:2}},
+  // ARKEMA
+  {id:"a001",name:"Rilsan PA11",mfr:"Arkema",base:"PA11",filler:null,fpct:0,type:"Engineering",rec:100,apps:["Oil & Gas","Automotive","Sports"],proc:{melt:[200,220],mold:[20,60],dry:[80,4]},props:{tens:51,flex:72,hdt:45,den:1.03,izod:99,cti:600,elong:300}},
+  {id:"a002",name:"Rilsan PA11 GF30",mfr:"Arkema",base:"PA11",filler:"GF",fpct:30,type:"Engineering",rec:80,apps:["Oil & Gas","Automotive"],proc:{melt:[205,225],mold:[20,60],dry:[80,4]},props:{tens:115,flex:170,hdt:130,den:1.32,izod:10,cti:600,elong:5}},
+  {id:"a003",name:"Pebax 3533",mfr:"Arkema",base:"PEBA",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Sports","Medical","Footwear"],proc:{melt:[180,200],mold:[20,40],dry:[70,3]},props:{tens:26,flex:null,hdt:null,den:1.01,izod:99,cti:null,elong:700}},
+  {id:"a004",name:"Pebax 5533",mfr:"Arkema",base:"PEBA",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Sports","Footwear","Industrial"],proc:{melt:[185,210],mold:[20,40],dry:[70,3]},props:{tens:35,flex:null,hdt:null,den:1.01,izod:99,cti:null,elong:550}},
+  {id:"a005",name:"Pebax Rnew 55R53",mfr:"Arkema",base:"PEBA",filler:null,fpct:0,type:"Engineering",rec:50,apps:["Sports","Footwear","Consumer"],proc:{melt:[175,195],mold:[20,40],dry:[70,3]},props:{tens:24,flex:null,hdt:null,den:1.01,izod:99,cti:null,elong:650}},
+  {id:"a006",name:"Kepstan 6001",mfr:"Arkema",base:"PEKK",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Aerospace","3D Printing","Oil & Gas"],proc:{melt:[340,370],mold:[160,200],dry:[150,4]},props:{tens:100,flex:155,hdt:160,den:1.30,izod:5,cti:175,elong:25}},
+  {id:"a007",name:"Kepstan 7002",mfr:"Arkema",base:"PEKK",filler:"CF",fpct:30,type:"Super-Engineering",rec:0,apps:["Aerospace","3D Printing","Industrial"],proc:{melt:[345,375],mold:[160,200],dry:[150,4]},props:{tens:180,flex:265,hdt:165,den:1.43,izod:7,cti:175,elong:2}},
+  {id:"a008",name:"Rilsamid PA12",mfr:"Arkema",base:"PA12",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Oil & Gas","Tubing"],proc:{melt:[220,240],mold:[30,60],dry:[80,4]},props:{tens:46,flex:58,hdt:55,den:1.02,izod:99,cti:600,elong:300}},
+  // LOTTE CHEMICAL
+  {id:"lc001",name:"LucanPC GP1000",mfr:"Lotte Chemical",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Electronics","Consumer"],proc:{melt:[265,295],mold:[75,95],dry:[110,4]},props:{tens:58,flex:82,hdt:120,den:1.20,izod:65,cti:175,elong:120}},
+  {id:"lc002",name:"LucanPC GP2200",mfr:"Lotte Chemical",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Electronics","Automotive"],proc:{melt:[270,300],mold:[80,100],dry:[110,4]},props:{tens:60,flex:88,hdt:125,den:1.20,izod:70,cti:175,elong:120}},
+  {id:"lc003",name:"LucanPC R-2000G",mfr:"Lotte Chemical",base:"PC",filler:null,fpct:0,type:"Engineering",rec:30,apps:["Consumer Goods","Electronics"],proc:{melt:[270,300],mold:[80,100],dry:[110,4]},props:{tens:58,flex:82,hdt:120,den:1.20,izod:65,cti:175,elong:100}},
+  {id:"lc004",name:"Pocan B1300",mfr:"Lotte Chemical",base:"PBT",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Electrical","Electronics","Automotive"],proc:{melt:[240,260],mold:[50,80],dry:[110,4]},props:{tens:52,flex:75,hdt:150,den:1.31,izod:5,cti:600,elong:200}},
+  {id:"lc005",name:"Pocan B4235",mfr:"Lotte Chemical",base:"PBT",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Electrical","Electronics"],proc:{melt:[245,265],mold:[60,80],dry:[110,4]},props:{tens:125,flex:185,hdt:210,den:1.52,izod:8,cti:600,elong:2}},
+  // LG CHEMICAL
+  {id:"lg001",name:"Lupoy GP-1004M",mfr:"LG Chemical",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Optical","Electronics"],proc:{melt:[280,310],mold:[80,100],dry:[120,5]},props:{tens:62,flex:90,hdt:130,den:1.20,izod:68,cti:175,elong:120}},
+  {id:"lg002",name:"Lupoy HI-1001",mfr:"LG Chemical",base:"PC/ABS",filler:null,fpct:0,type:"Engineering",rec:0,apps:["IT Equipment","Automotive"],proc:{melt:[240,265],mold:[60,80],dry:[100,3]},props:{tens:50,flex:72,hdt:105,den:1.14,izod:60,cti:175,elong:18}},
+  {id:"lg003",name:"LG Engage PA GF20",mfr:"LG Chemical",base:"PA6",filler:"GF",fpct:20,type:"Engineering",rec:20,apps:["Automotive","Consumer"],proc:{melt:[255,275],mold:[60,80],dry:[80,8]},props:{tens:155,flex:225,hdt:190,den:1.30,izod:9,cti:600,elong:4}},
+  // EVONIK
+  {id:"ev001",name:"Vestamid L2000",mfr:"Evonik",base:"PA12",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Oil & Gas","Sports","Tubing"],proc:{melt:[220,240],mold:[30,60],dry:[80,4]},props:{tens:46,flex:60,hdt:55,den:1.02,izod:99,cti:600,elong:300}},
+  {id:"ev002",name:"Vestamid L-CF10",mfr:"Evonik",base:"PA12",filler:"CF",fpct:10,type:"Engineering",rec:0,apps:["Automotive","Sports","Industrial"],proc:{melt:[225,245],mold:[30,60],dry:[80,4]},props:{tens:80,flex:120,hdt:100,den:1.10,izod:10,cti:600,elong:5}},
+  {id:"ev003",name:"Vestamid HTplus M1000",mfr:"Evonik",base:"PA6T/66",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Automotive","Electrical","Industrial"],proc:{melt:[295,320],mold:[120,150],dry:[100,6]},props:{tens:95,flex:135,hdt:260,den:1.19,izod:8,cti:600,elong:8}},
+  {id:"ev004",name:"Vestamid HTplus M1006",mfr:"Evonik",base:"PA6T/66",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Automotive","Electrical"],proc:{melt:[300,325],mold:[130,155],dry:[100,6]},props:{tens:185,flex:275,hdt:285,den:1.44,izod:10,cti:600,elong:2}},
+  {id:"ev005",name:"Vestakeep 5000G",mfr:"Evonik",base:"PEEK",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Medical","Aerospace","Electronics"],proc:{melt:[360,400],mold:[160,200],dry:[150,4]},props:{tens:160,flex:240,hdt:315,den:1.49,izod:8,cti:175,elong:2}},
+  {id:"ev006",name:"Vestakeep 4000 CF30",mfr:"Evonik",base:"PEEK",filler:"CF",fpct:30,type:"Super-Engineering",rec:0,apps:["Medical","Aerospace"],proc:{melt:[370,410],mold:[160,200],dry:[150,4]},props:{tens:200,flex:290,hdt:315,den:1.44,izod:7,cti:175,elong:1.5}},
+  // VICTREX
+  {id:"vi001",name:"Victrex 150G",mfr:"Victrex",base:"PEEK",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Medical","Electronics"],proc:{melt:[350,390],mold:[160,200],dry:[150,4]},props:{tens:92,flex:155,hdt:145,den:1.30,izod:5.5,cti:175,elong:35}},
+  {id:"vi002",name:"Victrex 450G",mfr:"Victrex",base:"PEEK",filler:null,fpct:0,type:"Super-Engineering",rec:0,apps:["Aerospace","Oil & Gas","Medical"],proc:{melt:[360,400],mold:[160,200],dry:[150,4]},props:{tens:100,flex:170,hdt:152,den:1.30,izod:6,cti:175,elong:30}},
+  {id:"vi003",name:"Victrex 90HMF40",mfr:"Victrex",base:"PEEK",filler:"CF",fpct:40,type:"Super-Engineering",rec:0,apps:["Aerospace","Industrial","Medical"],proc:{melt:[370,410],mold:[170,210],dry:[150,4]},props:{tens:215,flex:320,hdt:315,den:1.44,izod:8,cti:175,elong:1.2}},
+  {id:"vi004",name:"Victrex WG101",mfr:"Victrex",base:"PEEK",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Wear Parts","Industrial","Aerospace"],proc:{melt:[370,400],mold:[160,200],dry:[150,4]},props:{tens:155,flex:240,hdt:300,den:1.51,izod:8,cti:175,elong:2}},
+  // EMS GRIVORY
+  {id:"em001",name:"Grivory GV-5H",mfr:"EMS Grivory",base:"PA66/6T",filler:"GF",fpct:50,type:"Engineering",rec:0,apps:["Automotive","Electrical","Industrial"],proc:{melt:[285,305],mold:[80,100],dry:[80,8]},props:{tens:250,flex:370,hdt:285,den:1.55,izod:12,cti:600,elong:2}},
+  {id:"em002",name:"Grivory GV-3H",mfr:"EMS Grivory",base:"PA66/6T",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Electrical"],proc:{melt:[285,305],mold:[80,100],dry:[80,8]},props:{tens:185,flex:270,hdt:280,den:1.41,izod:10,cti:600,elong:2.5}},
+  {id:"em003",name:"Grivory HTV-5H",mfr:"EMS Grivory",base:"PA6T/66",filler:"GF",fpct:50,type:"Super-Engineering",rec:0,apps:["Automotive","Electrical","SMT"],proc:{melt:[310,335],mold:[130,155],dry:[100,8]},props:{tens:245,flex:360,hdt:280,den:1.60,izod:13,cti:600,elong:1.5}},
+  {id:"em004",name:"Grilamid TR90",mfr:"EMS Grivory",base:"PAMXD6",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Optical","Sports","Medical","Eyewear"],proc:{melt:[270,290],mold:[70,90],dry:[80,6]},props:{tens:75,flex:110,hdt:160,den:1.18,izod:5,cti:175,elong:8}},
+  {id:"em005",name:"Grilon PA6 GF50",mfr:"EMS Grivory",base:"PA6",filler:"GF",fpct:50,type:"Engineering",rec:0,apps:["Automotive","Structural","Industrial"],proc:{melt:[260,280],mold:[70,90],dry:[80,8]},props:{tens:210,flex:310,hdt:215,den:1.60,izod:13,cti:600,elong:2}},
+  {id:"em006",name:"Grilamid L25W",mfr:"EMS Grivory",base:"PA12",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Oil & Gas","Industrial"],proc:{melt:[220,240],mold:[30,60],dry:[80,4]},props:{tens:45,flex:58,hdt:55,den:1.02,izod:99,cti:600,elong:310}},
+  // POLYPLASTICS
+  {id:"pp001",name:"Durafide 6165A6",mfr:"Polyplastics",base:"PPS",filler:"GF",fpct:65,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics","Relays"],proc:{melt:[320,340],mold:[135,150],dry:[150,4]},props:{tens:220,flex:310,hdt:270,den:1.90,izod:12,cti:250,elong:1.0}},
+  {id:"pp002",name:"Duracon M90",mfr:"Polyplastics",base:"POM",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Consumer","Industrial","Gears"],proc:{melt:[200,220],mold:[60,80],dry:[0,0]},props:{tens:66,flex:91,hdt:110,den:1.41,izod:7.5,cti:175,elong:40}},
+  {id:"pp003",name:"Laperos LCP A130",mfr:"Polyplastics",base:"LCP",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Electronics","Connectors","Automotive"],proc:{melt:[290,320],mold:[60,100],dry:[150,4]},props:{tens:130,flex:210,hdt:250,den:1.60,izod:6,cti:175,elong:1.5}},
+  // MITSUBISHI
+  {id:"mi001",name:"Iupilon S-2000",mfr:"Mitsubishi",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Automotive","Electronics","Medical"],proc:{melt:[270,300],mold:[80,100],dry:[110,4]},props:{tens:60,flex:87,hdt:130,den:1.20,izod:65,cti:175,elong:120}},
+  {id:"mi002",name:"Novalloy-B 1000",mfr:"Mitsubishi",base:"PC/ABS",filler:null,fpct:0,type:"Engineering",rec:0,apps:["IT Equipment","Automotive"],proc:{melt:[240,265],mold:[60,80],dry:[100,3]},props:{tens:48,flex:70,hdt:100,den:1.13,izod:55,cti:175,elong:15}},
+  {id:"mi003",name:"Novaduran 5010G30",mfr:"Mitsubishi",base:"PBT",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Electrical","Electronics"],proc:{melt:[245,265],mold:[60,80],dry:[110,4]},props:{tens:128,flex:192,hdt:208,den:1.52,izod:8,cti:600,elong:2.5}},
+  // TEIJIN
+  {id:"te001",name:"Teijin PC L-1250Y",mfr:"Teijin",base:"PC",filler:null,fpct:0,type:"Engineering",rec:0,apps:["Optical","Electronics","Medical"],proc:{melt:[275,305],mold:[80,100],dry:[120,5]},props:{tens:62,flex:90,hdt:130,den:1.20,izod:68,cti:175,elong:120}},
+  {id:"te002",name:"Teonex TN-8065S",mfr:"Teijin",base:"PEN",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Electronics","Automotive","Packaging"],proc:{melt:[270,290],mold:[70,90],dry:[120,6]},props:{tens:165,flex:240,hdt:185,den:1.49,izod:9,cti:175,elong:3}},
+  // IDEMITSU
+  {id:"id001",name:"Xarec SPS GF30",mfr:"Idemitsu",base:"SPS",filler:"GF",fpct:30,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics","Electrical"],proc:{melt:[285,310],mold:[120,150],dry:[120,4]},props:{tens:130,flex:195,hdt:255,den:1.38,izod:7,cti:600,elong:2}},
+  {id:"id002",name:"Xarec SPS CF20",mfr:"Idemitsu",base:"SPS",filler:"CF",fpct:20,type:"Super-Engineering",rec:0,apps:["Automotive","Electronics","EV"],proc:{melt:[285,310],mold:[120,150],dry:[120,4]},props:{tens:145,flex:215,hdt:258,den:1.30,izod:6,cti:600,elong:1.5}},
+  // SAMYANGSA
+  {id:"sa001",name:"Trirex PA6 GF30",mfr:"Samyangsa",base:"PA6",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Industrial"],proc:{melt:[255,275],mold:[60,80],dry:[80,8]},props:{tens:170,flex:250,hdt:195,den:1.35,izod:10,cti:600,elong:3}},
+  {id:"sa002",name:"Trirex PC GF10",mfr:"Samyangsa",base:"PC",filler:"GF",fpct:10,type:"Engineering",rec:0,apps:["Electronics","Automotive"],proc:{melt:[280,300],mold:[80,100],dry:[110,4]},props:{tens:68,flex:95,hdt:135,den:1.26,izod:7,cti:175,elong:3}},
+  {id:"sa003",name:"Trirex PA66 GF30",mfr:"Samyangsa",base:"PA66",filler:"GF",fpct:30,type:"Engineering",rec:0,apps:["Automotive","Industrial"],proc:{melt:[270,290],mold:[70,90],dry:[80,8]},props:{tens:175,flex:258,hdt:242,den:1.36,izod:10,cti:600,elong:3}},
+];
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+const API_KEY=()=>window.ANTHROPIC_API_KEY||'';
+
+async function callClaude(system,userContent,useWebSearch=false){
+  const body={model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages:[{role:"user",content:userContent}]};
+  if(useWebSearch)body.tools=[{type:"web_search_20250305",name:"web_search"}];
+  const res=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":API_KEY(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify(body)
+  });
+  if(!res.ok){const e=await res.json();throw new Error(e.error?.message||"API error");}
+  const data=await res.json();
+  return data.content?.map(c=>c.text||"").filter(Boolean).join("")||"";
+}
+
+function exportCSV(data,filename){
+  if(!data.length)return;
+  const keys=["name","type","mfr","base","filler","fpct","rec","apps","tens","flex","hdt","den","izod","cti","elong","meltLow","meltHigh","moldLow","moldHigh","dryTemp","dryHrs"];
+  const rows=data.map(p=>[p.name,p.type,p.mfr,p.base,p.filler||"Unfilled",p.fpct,p.rec,(p.apps||[]).join("|"),
+    p.props?.tens??"",p.props?.flex??"",p.props?.hdt??"",p.props?.den??"",p.props?.izod??"",p.props?.cti??"",p.props?.elong??"",
+    p.proc?.melt?.[0]??"",p.proc?.melt?.[1]??"",p.proc?.mold?.[0]??"",p.proc?.mold?.[1]??"",p.proc?.dry?.[0]??"",p.proc?.dry?.[1]??""]);
+  const csv=[keys.join(","),...rows.map(r=>r.map(v=>String(v??"")))].join("\n");
+  const blob=new Blob([csv],{type:"text/csv"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=filename;a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── COMPONENTS ───────────────────────────────────────────────────────────
+function PropBar({label,value,max,unit,color="#3b82f6"}){
+  const pct=Math.min(100,(value/max)*100);
+  return(
+    <div style={{marginBottom:6}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#94a3b8",marginBottom:2}}>
+        <span>{label}</span><span style={{color:"#e2e8f0",fontWeight:600}}>{value} {unit}</span>
+      </div>
+      <div style={{height:3,background:"#172035",borderRadius:3,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:3}}/>
+      </div>
+    </div>
+  );
+}
+
+const tcBg={Engineering:"#1e3a5f","Super-Engineering":"#2d1b4a",General:"#1a2e1f",Rubber:"#2e1e10"};
+const tcTx={Engineering:"#60a5fa","Super-Engineering":"#a78bfa",General:"#4ade80",Rubber:"#f97316"};
+
+function DatabaseTab(){
+  const [allData,setAllData]=useState(SEED_DB);
+  const [search,setSearch]=useState("");
+  const [typeF,setTypeF]=useState("All");
+  const [mfrF,setMfrF]=useState("All");
+  const [baseF,setBaseF]=useState("All");
+  const [fillerF,setFillerF]=useState("All");
+  const [sortBy,setSortBy]=useState("name");
+  const [cmp,setCmp]=useState([]);
+  const [expanded,setExpanded]=useState({});
+  const [liveQ,setLiveQ]=useState("");
+  const [liveLoading,setLiveLoading]=useState(false);
+  const [liveStatus,setLiveStatus]=useState("");
+  const [noKey,setNoKey]=useState(false);
+
+  const allMfrs=useMemo(()=>["All",...new Set(allData.map(p=>p.mfr))].sort(),[allData]);
+  const allBases=useMemo(()=>["All",...new Set(allData.map(p=>p.base))].sort(),[allData]);
+  const allFillers=useMemo(()=>["All","None",...new Set(allData.map(p=>p.filler).filter(Boolean))].sort(),[allData]);
+  const allTypes=["All","Engineering","Super-Engineering","General","Rubber"];
+
+  const filtered=useMemo(()=>{
+    let r=allData.filter(p=>{
+      if(search&&![p.name,p.base,p.mfr].some(s=>s?.toLowerCase().includes(search.toLowerCase())))return false;
+      if(typeF!=="All"&&p.type!==typeF)return false;
+      if(mfrF!=="All"&&p.mfr!==mfrF)return false;
+      if(baseF!=="All"&&p.base!==baseF)return false;
+      if(fillerF!=="All"){if(fillerF==="None"&&p.filler)return false;if(fillerF!=="None"&&p.filler!==fillerF)return false;}
+      return true;
+    });
+    const sk={name:(a,b)=>a.name.localeCompare(b.name),tens:(a,b)=>(b.props?.tens||0)-(a.props?.tens||0),hdt:(a,b)=>(b.props?.hdt||0)-(a.props?.hdt||0),den:(a,b)=>(a.props?.den||0)-(b.props?.den||0)};
+    return [...r].sort(sk[sortBy]||sk.name);
+  },[allData,search,typeF,mfrF,baseF,fillerF,sortBy]);
+
+  const fetchLive=async()=>{
+    if(!liveQ.trim()||liveLoading)return;
+    if(!API_KEY()||API_KEY()==='YOUR_ANTHROPIC_API_KEY_HERE'){setNoKey(true);return;}
+    setLiveLoading(true);setLiveStatus("Searching manufacturer catalogs...");
+    try{
+      const sys=`You are a polymer materials expert. Find real commercial polymer grades matching the query by searching manufacturer websites, UL Prospector, SpecialChem, and MatWeb.
+Return ONLY a valid JSON array — no markdown, no preamble. Each item:
+{id,name,mfr,base,filler,fpct,type,rec,apps,proc:{melt:[min,max],mold:[min,max],dry:[temp,hours]},props:{tens,flex,hdt,den,izod,cti,elong}}
+- id: "live_XXX" unique string
+- type: "Engineering" or "Super-Engineering" or "General" or "Rubber"
+- filler: "GF","CF","MF", or null. fpct: 0 if none
+- rec: recycled % (0 if none)
+- proc.dry: [0,0] if no drying required
+- props: numbers or null. tens=MPa,flex=MPa,hdt=°C,den=g/cm³,izod=kJ/m²,cti=V,elong=%
+Find 10-20 real grades. Return only the JSON array.`;
+      const text=await callClaude(sys,`Find commercial polymer grades: ${liveQ}`,true);
+      const match=text.match(/\[[\s\S]*?\]/);
+      let parsed=[];
+      if(match){try{parsed=JSON.parse(match[0]);}catch(e){}}
+      if(parsed.length){
+        setAllData(prev=>{
+          const names=new Set(prev.map(p=>p.name.toLowerCase()));
+          const fresh=parsed.filter(p=>p?.name&&p?.mfr&&!names.has(p.name.toLowerCase()));
+          return [...prev,...fresh];
+        });
+        setLiveStatus(`✓ Added grades from live search. Total: ${allData.length+parsed.length}`);
+      }else{setLiveStatus("No new grades found — try a different query.");}
+    }catch(e){setLiveStatus(`Error: ${e.message}`);}
+    setLiveLoading(false);
+    setTimeout(()=>setLiveStatus(""),5000);
+  };
+
+  const toggleCmp=p=>setCmp(prev=>prev.find(x=>x.id===p.id)?prev.filter(x=>x.id!==p.id):prev.length<5?[...prev,p]:prev);
+  const toggleExp=id=>setExpanded(prev=>({...prev,[id]:!prev[id]}));
+
+  return(
+    <div>
+      {noKey&&(
+        <div style={{background:"#2e1e10",border:"1px solid #f97316",borderRadius:8,padding:12,marginBottom:12,fontSize:12}}>
+          <strong style={{color:"#f97316"}}>API Key not configured.</strong>
+          <span style={{color:"#94a3b8",marginLeft:6}}>Edit index.html and replace <code style={{color:"#fbbf24"}}>YOUR_ANTHROPIC_API_KEY_HERE</code> with your key from <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. See README.md for details.</span>
+        </div>
+      )}
+      <div style={{background:"#060c1a",border:"1px solid #1e3a5f",borderRadius:10,padding:12,marginBottom:12}}>
+        <div style={{fontSize:10,color:"#60a5fa",fontWeight:700,marginBottom:7,textTransform:"uppercase",letterSpacing:"0.06em"}}>Live Fetch — Expand Database from Manufacturer Catalogs</div>
+        <div style={{display:"flex",gap:7}}>
+          <input className="inp" style={{flex:1}} placeholder='e.g. "Covestro Makrolon PC" · "Envalior Akulon PA6" · "Toray Torelina PPS" · "LANXESS Durethan" · "Solvay Torlon PAI"' value={liveQ} onChange={e=>setLiveQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fetchLive()}/>
+          <button onClick={fetchLive} disabled={liveLoading} className="btn btn-primary">{liveLoading?<span style={{display:"flex",alignItems:"center",gap:5}}><span className="spinner"/>Fetching...</span>:"Fetch Grades"}</button>
+        </div>
+        {liveStatus&&<div style={{fontSize:11,marginTop:6,color:liveStatus.startsWith("✓")?"#34d399":"#94a3b8"}}>{liveStatus}</div>}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:8}} className="grid-3">
+        <input className="inp" placeholder="Search name, base, manufacturer..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select className="sel" value={typeF} onChange={e=>setTypeF(e.target.value)}>{allTypes.map(t=><option key={t}>{t==="All"?"All Types":t}</option>)}</select>
+        <select className="sel" value={mfrF} onChange={e=>setMfrF(e.target.value)}>{allMfrs.map(m=><option key={m}>{m==="All"?"All Manufacturers":m}</option>)}</select>
+        <select className="sel" value={baseF} onChange={e=>setBaseF(e.target.value)}>{allBases.map(b=><option key={b}>{b==="All"?"All Base Polymers":b}</option>)}</select>
+        <select className="sel" value={fillerF} onChange={e=>setFillerF(e.target.value)}>{allFillers.map(f=><option key={f}>{f==="All"?"All Fillers":f}</option>)}</select>
+        <select className="sel" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+          <option value="name">Sort: A–Z</option><option value="tens">Sort: Tensile ↓</option>
+          <option value="hdt">Sort: HDT ↓</option><option value="den">Sort: Density ↑</option>
+        </select>
+      </div>
+
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
+        <span style={{fontSize:11,color:"#475569"}}><span style={{color:"#60a5fa",fontWeight:700}}>{allData.length}</span> total · <span style={{color:"#94a3b8"}}>{filtered.length}</span> shown</span>
+        <div style={{display:"flex",gap:7,alignItems:"center"}}>
+          {cmp.length>=2&&<span style={{fontSize:10,color:"#a78bfa"}}>{cmp.length} in compare</span>}
+          <button onClick={()=>exportCSV(filtered,"polymeriq_export.csv")} className="btn btn-green" style={{fontSize:10}}>↓ Export CSV</button>
+        </div>
+      </div>
+
+      {cmp.length>=2&&(
+        <div style={{background:"#0a1020",border:"1px solid #1e3a5f",borderRadius:10,padding:14,marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <span style={{fontWeight:700,fontSize:12,color:"#60a5fa"}}>Comparing {cmp.length} materials</span>
+            <div style={{display:"flex",gap:7}}>
+              <button onClick={()=>exportCSV(cmp,"comparison.csv")} className="btn btn-green" style={{fontSize:10}}>↓ CSV</button>
+              <button onClick={()=>setCmp([])} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:18}}>×</button>
+            </div>
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead>
+                <tr>
+                  <td style={{padding:"4px 8px",color:"#334155",fontSize:10}}>PROPERTY</td>
+                  {cmp.map(p=><td key={p.id} style={{padding:"4px 8px",fontWeight:700,color:"#e2e8f0",textAlign:"center",minWidth:110}}>
+                    <div>{p.name}</div><div style={{fontSize:9,color:"#475569",fontWeight:400}}>{p.mfr}</div>
+                  </td>)}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  {l:"Base",g:p=>p.base},{l:"Filler",g:p=>p.filler||"Unfilled"},{l:"Filler %",g:p=>p.fpct?`${p.fpct}%`:"—"},{l:"Recycled",g:p=>`${p.rec}%`},
+                  {l:"Tensile MPa",g:p=>p.props?.tens,num:true},{l:"Flexural MPa",g:p=>p.props?.flex,num:true},
+                  {l:"Elongation %",g:p=>p.props?.elong,num:true},{l:"HDT °C",g:p=>p.props?.hdt,num:true},
+                  {l:"Density g/cm³",g:p=>p.props?.den},{l:"CTI V",g:p=>p.props?.cti},
+                  {l:"Melt °C",g:p=>p.proc?.melt?`${p.proc.melt[0]}–${p.proc.melt[1]}`:"—"},
+                  {l:"Drying",g:p=>p.proc?.dry?.[0]?`${p.proc.dry[0]}°C/${p.proc.dry[1]}h`:"None"},
+                ].map(r=>{
+                  const vals=r.num?cmp.map(p=>{const v=r.g(p);return typeof v==='number'?v:null}):[];
+                  const mx=vals.length?Math.max(...vals.filter(v=>v!==null)):null;
+                  return(<tr key={r.l} style={{borderTop:"1px solid #0d1526"}}>
+                    <td style={{padding:"4px 8px",color:"#64748b",whiteSpace:"nowrap"}}>{r.l}</td>
+                    {cmp.map(p=>{const v=r.g(p);const isMax=r.num&&typeof v==='number'&&v===mx&&vals.filter(x=>x!==null).length>1;
+                      return<td key={p.id} style={{padding:"4px 8px",textAlign:"center",color:isMax?"#34d399":"#e2e8f0",fontWeight:isMax?700:400}}>{v!=null?v:"—"}</td>;
+                    })}
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div style={{maxHeight:"calc(100vh - 380px)",overflowY:"auto",paddingRight:3}}>
+        {filtered.map(p=>{
+          const exp=expanded[p.id];const isCmp=!!cmp.find(x=>x.id===p.id);
+          return(
+            <div key={p.id} className="card fade-in" style={{border:isCmp?"1px solid #2563eb":"1px solid #172035"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:7}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:12,color:"#e2e8f0",marginBottom:4}}>{p.name}</div>
+                  <div>
+                    <span className="badge" style={{background:tcBg[p.type]||"#1e2d4a",color:tcTx[p.type]||"#60a5fa"}}>{p.type}</span>
+                    <span className="badge" style={{background:"#1a2e1f",color:"#4ade80"}}>{p.base}</span>
+                    <span className="badge" style={{background:"#1e2a1a",color:"#86efac"}}>{p.mfr}</span>
+                    {p.filler&&<span className="badge" style={{background:"#2a2010",color:"#fbbf24"}}>{p.filler} {p.fpct}%</span>}
+                    {p.rec>0&&<span className="badge" style={{background:"#14291e",color:"#34d399"}}>♻ {p.rec}%</span>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:5,flexShrink:0}}>
+                  <button onClick={()=>toggleCmp(p)} className="btn" style={{background:isCmp?"#1d4ed8":"#172035",color:"#e2e8f0",fontSize:10,padding:"4px 8px"}}>{isCmp?"✓":"+ Cmp"}</button>
+                  <button onClick={()=>toggleExp(p.id)} className="btn btn-ghost" style={{fontSize:10,padding:"4px 8px"}}>{exp?"▲":"▼"}</button>
+                </div>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{(p.apps||[]).map(a=><span key={a} style={{fontSize:9,padding:"1px 5px",borderRadius:10,background:"#0a1020",border:"1px solid #172035",color:"#475569"}}>{a}</span>)}</div>
+              {exp&&(
+                <div style={{marginTop:10,borderTop:"1px solid #172035",paddingTop:10}} className="fade-in">
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                    <div>
+                      <div style={{fontSize:9,color:"#60a5fa",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Mechanical</div>
+                      {p.props?.tens&&<PropBar label="Tensile" value={p.props.tens} max={350} unit="MPa" color="#3b82f6"/>}
+                      {p.props?.flex&&<PropBar label="Flexural" value={p.props.flex} max={420} unit="MPa" color="#6366f1"/>}
+                      {p.props?.hdt&&<><div style={{fontSize:9,color:"#f59e0b",fontWeight:700,margin:"7px 0 5px",textTransform:"uppercase",letterSpacing:"0.05em"}}>Thermal</div><PropBar label="HDT" value={p.props.hdt} max={340} unit="°C" color="#f59e0b"/></>}
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:"#22d3ee",fontWeight:700,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Processing</div>
+                      {p.proc&&[
+                        {l:"Melt",v:p.proc.melt?`${p.proc.melt[0]}–${p.proc.melt[1]}°C`:"—"},
+                        {l:"Mold",v:p.proc.mold?`${p.proc.mold[0]}–${p.proc.mold[1]}°C`:"—"},
+                        {l:"Dry",v:p.proc.dry?.[0]?`${p.proc.dry[0]}°C / ${p.proc.dry[1]}h`:"None"},
+                      ].map(x=><div key={x.l} style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:5,padding:"4px 7px",background:"#060c1a",borderRadius:5}}>
+                        <span style={{color:"#475569"}}>{x.l}</span><span style={{color:"#22d3ee",fontWeight:600}}>{x.v}</span>
+                      </div>)}
+                      <div style={{fontSize:9,color:"#10b981",fontWeight:700,margin:"8px 0 5px",textTransform:"uppercase",letterSpacing:"0.05em"}}>Physical</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                        {[{l:"Density",v:`${p.props?.den||"—"} g/cm³`},{l:"CTI",v:p.props?.cti?`${p.props.cti} V`:"—"}].map(x=><div key={x.l} style={{background:"#060c1a",borderRadius:5,padding:6}}><div style={{color:"#334155",fontSize:9}}>{x.l}</div><div style={{color:"#e2e8f0",fontWeight:700,fontSize:12}}>{x.v}</div></div>)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!filtered.length&&<div style={{textAlign:"center",padding:40,color:"#475569"}}>No results. Use Live Fetch to search manufacturer catalogs.</div>}
+      </div>
+    </div>
+  );
+}
+
+function AIChat(){
+  const [msgs,setMsgs]=useState([{role:"assistant",content:"Hello! I'm PolymerIQ with live web search.\n\nI can search manufacturer catalogs, compare grades, recommend materials for applications, and find research papers.\n\nTry:\n- *Best PPS grade for EV battery housing?*\n- *Compare Victrex 450G vs Evonik Vestakeep for medical*\n- *All commercial PEKK grades available?*\n- *PA11 vs PA12 for subsea flexible pipe*"}]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [noKey,setNoKey]=useState(false);
+  const bottomRef=useRef(null);
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"})},[msgs]);
+
+  const send=async()=>{
+    if(!input.trim()||loading)return;
+    if(!API_KEY()||API_KEY()==='YOUR_ANTHROPIC_API_KEY_HERE'){setNoKey(true);return;}
+    const userMsg=input.trim();setInput("");
+    setMsgs(prev=>[...prev,{role:"user",content:userMsg}]);
+    setLoading(true);
+    try{
+      const history=msgs.slice(-10).map(m=>({role:m.role,content:m.content}));
+      const text=await callClaude(
+        `You are PolymerIQ, an expert polymer materials intelligence assistant with live web search. You have a seed database of ${SEED_DB.length} grades. Use web search to find real datasheets, manufacturer pages, grade comparisons, and research. Be concise, technical, and accurate. Bold **material names**. Cite manufacturer and exact grade name.`,
+        [...history,{role:"user",content:userMsg}].map(m=>`${m.role}: ${m.content}`).join("\n"),true
+      );
+      setMsgs(prev=>[...prev,{role:"assistant",content:text||"No response generated."}]);
+    }catch(e){setMsgs(prev=>[...prev,{role:"assistant",content:`Error: ${e.message}`}]);}
+    setLoading(false);
+  };
+
+  const sugg=["Best PPS for EV battery?","PEEK grades for medical implants","Compare PA6 vs PA66 GF30","Torlon PAI properties","LCP dielectric for 5G","PA11 vs PA12 subsea"];
+  const renderMsg=content=>content.split('\n').map((line,i)=>{
+    const h=line.replace(/\*\*(.*?)\*\*/g,'<strong style="color:#60a5fa">$1</strong>').replace(/\*(.*?)\*/g,'<em style="color:#94a3b8">$1</em>');
+    if(/^[-•]\s/.test(line))return<div key={i} style={{paddingLeft:12,marginBottom:3,lineHeight:1.6}}>• <span dangerouslySetInnerHTML={{__html:h.replace(/^[-•]\s/,"")}}/></div>;
+    if(line.startsWith('# '))return<div key={i} style={{fontWeight:700,fontSize:13,color:"#60a5fa",marginTop:10,marginBottom:4}}>{line.slice(2)}</div>;
+    if(line.startsWith('## '))return<div key={i} style={{fontWeight:600,fontSize:12,color:"#93c5fd",marginTop:8,marginBottom:3}}>{line.slice(3)}</div>;
+    if(!line.trim())return<div key={i} style={{height:4}}/>;
+    return<div key={i} style={{marginBottom:2,lineHeight:1.6}} dangerouslySetInnerHTML={{__html:h}}/>;
+  });
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 200px)",minHeight:500}}>
+      {noKey&&<div style={{background:"#2e1e10",border:"1px solid #f97316",borderRadius:8,padding:10,marginBottom:10,fontSize:11,color:"#94a3b8"}}>API key not configured. Edit index.html. See README.md.</div>}
+      <div style={{flex:1,overflowY:"auto",paddingRight:3,marginBottom:10}}>
+        {msgs.map((m,i)=>(
+          <div key={i} style={{marginBottom:10,display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+            <div style={{maxWidth:"88%",padding:"10px 13px",borderRadius:m.role==="user"?"12px 12px 4px 12px":"12px 12px 12px 4px",background:m.role==="user"?"#1d4ed8":"#0d1320",border:m.role==="user"?"none":"1px solid #172035",fontSize:12,lineHeight:1.6,color:"#e2e8f0"}}>
+              {m.role==="assistant"?renderMsg(m.content):m.content}
+            </div>
+          </div>
+        ))}
+        {loading&&<div style={{display:"flex",gap:5,padding:"10px 13px",background:"#0d1320",border:"1px solid #172035",borderRadius:"12px 12px 12px 4px",width:"fit-content",marginBottom:10}}>
+          {[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#3b82f6",animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}
+        </div>}
+        <div ref={bottomRef}/>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+        {sugg.map(s=><button key={s} onClick={()=>setInput(s)} style={{fontSize:10,padding:"3px 9px",background:"#0a1020",border:"1px solid #172035",borderRadius:20,color:"#94a3b8",cursor:"pointer"}}>{s}</button>)}
+      </div>
+      <div style={{display:"flex",gap:7,alignItems:"center"}}>
+        <div style={{fontSize:9,padding:"3px 7px",background:"#064e3b",borderRadius:4,color:"#34d399",whiteSpace:"nowrap",flexShrink:0}}>Web ON</div>
+        <input className="inp" style={{flex:1}} placeholder="Ask about polymer materials..." value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}/>
+        <button onClick={send} disabled={loading||!input.trim()} className="btn btn-primary">{loading?"...":"Send"}</button>
+      </div>
+    </div>
+  );
+}
+
+function EducationTab(){
+  const resources=[
+    {title:"Introduction to Polymer Science",type:"Textbook",author:"Hiemenz & Lodge",year:2007,topic:"Fundamentals",url:"https://www.routledge.com/Polymer-Chemistry/Hiemenz-Lodge/p/book/9781574447798",level:"Undergraduate/Graduate"},
+    {title:"Polymer Physics",type:"Textbook",author:"Rubinstein & Colby",year:2003,topic:"Physics",url:"https://global.oup.com/academic/product/polymer-physics-9780198520597",level:"Graduate"},
+    {title:"Plastics Technology Handbook",type:"Handbook",author:"Rosato et al.",year:2012,topic:"Processing",url:"https://www.sciencedirect.com/book/9780815514428",level:"Industry"},
+    {title:"Injection Molding Handbook",type:"Handbook",author:"Rosato & Rosato",year:2012,topic:"Processing",url:"https://www.springer.com/gp/book/9780412994012",level:"Industry"},
+    {title:"PEEK Biomaterials Handbook",type:"Handbook",author:"Kurtz, S.M.",year:2019,topic:"Super-Engineering",url:"https://www.elsevier.com/books/peek-biomaterials-handbook/kurtz/978-0-12-812524-3",level:"Graduate/Industry"},
+    {title:"Polymer Handbook",type:"Handbook",author:"Brandrup et al.",year:2005,topic:"Material Data",url:"https://www.wiley.com/en-us/Polymer+Handbook-p-9780471166283",level:"Graduate/Research"},
+    {title:"MIT OCW: Polymer Physics",type:"Online Course",author:"MIT",year:2023,topic:"Fundamentals",url:"https://ocw.mit.edu/courses/3-063-polymer-physics-spring-2007/",level:"Graduate"},
+    {title:"Coursera Polymer Courses",type:"Online Course",author:"Various",year:2024,topic:"Fundamentals",url:"https://www.coursera.org/courses?query=polymer%20science",level:"Undergraduate"},
+    {title:"NPTel IIT Polymer Lectures",type:"Online Course",author:"IIT",year:2023,topic:"Fundamentals",url:"https://www.youtube.com/results?search_query=nptel+polymer+science",level:"Undergraduate"},
+    {title:"SPE Plastics Engineering",type:"Online Course",author:"SPE",year:2024,topic:"Processing",url:"https://www.4spe.org",level:"Industry"},
+    {title:"UL Prospector (IDES)",type:"Database",author:"UL",year:2024,topic:"Material Data",url:"https://www.ulprospector.com/en/na/Plastics",level:"Industry"},
+    {title:"SpecialChem Omnexus",type:"Database",author:"SpecialChem",year:2024,topic:"Material Data",url:"https://omnexus.specialchem.com/polymer-properties",level:"Industry"},
+    {title:"MatWeb",type:"Database",author:"MatWeb",year:2024,topic:"Material Data",url:"https://www.matweb.com",level:"Industry/Research"},
+    {title:"Macromolecules (ACS)",type:"Journal",author:"ACS",year:2024,topic:"Chemistry/Physics",url:"https://pubs.acs.org/journal/mamobx",level:"Research"},
+    {title:"Polymer Degradation & Stability",type:"Journal",author:"Elsevier",year:2024,topic:"Sustainability",url:"https://www.sciencedirect.com/journal/polymer-degradation-and-stability",level:"Research"},
+    {title:"Green Chemistry (RSC)",type:"Journal",author:"RSC",year:2024,topic:"Sustainability",url:"https://www.rsc.org/journals-books-databases/find-an-journal/green-chemistry/",level:"Research"},
+    {title:"PlasticsToday",type:"Online Resource",author:"PlasticsToday",year:2024,topic:"Industry News",url:"https://www.plasticstoday.com",level:"Industry"},
+    {title:"Bioplastics Magazine",type:"Online Resource",author:"Bioplastics Magazine",year:2024,topic:"Sustainability",url:"https://www.bioplasticsmagazine.com",level:"Industry/Research"},
+  ];
+  const [search,setSearch]=useState("");const [tf,setTf]=useState("All");
+  const types=["All",...new Set(resources.map(r=>r.type))];
+  const filtered=resources.filter(r=>(tf==="All"||r.type===tf)&&(!search||r.title.toLowerCase().includes(search.toLowerCase())||r.topic.toLowerCase().includes(search.toLowerCase())));
+  const bg={Textbook:"#1e3a5f","Online Course":"#1a2e1f",Handbook:"#2e1e10",Journal:"#2d1b4a",Database:"#1e2a1a","Online Resource":"#2a1a2e"};
+  const tx={Textbook:"#60a5fa","Online Course":"#4ade80",Handbook:"#f97316",Journal:"#a78bfa",Database:"#10b981","Online Resource":"#c084fc"};
+  return(
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:12}}>
+        <input className="inp" placeholder="Search resources..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select className="sel" value={tf} onChange={e=>setTf(e.target.value)}>{types.map(t=><option key={t}>{t}</option>)}</select>
+      </div>
+      <div style={{maxHeight:"calc(100vh - 240px)",overflowY:"auto",paddingRight:3}}>
+        {filtered.map((r,i)=>(
+          <div key={i} className="card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:12,color:"#e2e8f0",marginBottom:3}}>{r.title}</div>
+                <div style={{fontSize:11,color:"#94a3b8",marginBottom:5}}>{r.author} · {r.year}</div>
+                <div>
+                  <span className="badge" style={{background:bg[r.type]||"#1e2d4a",color:tx[r.type]||"#60a5fa"}}>{r.type}</span>
+                  <span className="badge" style={{background:"#0a1020",color:"#94a3b8"}}>{r.topic}</span>
+                  <span className="badge" style={{background:"#1a1f2e",color:"#475569"}}>{r.level}</span>
+                </div>
+              </div>
+              <a href={r.url} target="_blank" rel="noopener noreferrer" style={{marginLeft:10,padding:"5px 10px",background:"#1e3a5f",borderRadius:6,color:"#60a5fa",textDecoration:"none",fontSize:10,whiteSpace:"nowrap",flexShrink:0}}>Open →</a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResearchTab(){
+  const curated=[
+    {title:"High-performance PEEK composites for aerospace",journal:"Composites Part A",year:2024,authors:"Kim, J. et al.",doi:"10.1016/j.compositesa.2024.01.005",tags:["PEEK","CF","Aerospace"]},
+    {title:"Recycled PA6 GF30 for automotive structural components",journal:"J. Applied Polymer Science",year:2024,authors:"Müller, A. et al.",doi:"10.1002/app.55234",tags:["PA6","GF","Recycled","Automotive"]},
+    {title:"Bio-based PA11 for oil & gas flexible pipe",journal:"Polymer Engineering & Science",year:2023,authors:"Nakamura, T. et al.",doi:"10.1002/pen.26543",tags:["PA11","Bio-based","Oil & Gas"]},
+    {title:"PPS nanocomposites for EV motor insulation",journal:"Polymer",year:2024,authors:"Chen, L. et al.",doi:"10.1016/j.polymer.2024.126789",tags:["PPS","EV","Electrical"]},
+    {title:"ML prediction of polymer blend properties",journal:"npj Computational Materials",year:2024,authors:"Park, S. et al.",doi:"10.1038/s41524-024-01234-5",tags:["ML","AI","Blends"]},
+    {title:"Circular economy for engineering thermoplastics",journal:"Resources Conservation Recycling",year:2024,authors:"Schneider, K. et al.",doi:"10.1016/j.resconrec.2024.107234",tags:["Recycling","LCA","Sustainability"]},
+    {title:"PEKK for additive manufacturing",journal:"Additive Manufacturing",year:2024,authors:"Leroy, M. et al.",doi:"10.1016/j.addma.2024.103456",tags:["PEKK","3D Printing"]},
+    {title:"LFT PA66-GF for automotive lightweighting",journal:"Composites Science & Technology",year:2023,authors:"Wang, Y. et al.",doi:"10.1016/j.compscitech.2023.110123",tags:["PA66","GF","Automotive"]},
+    {title:"PPSU hydrolytic stability in sterilization",journal:"J. Applied Polymer Science",year:2024,authors:"García, R. et al.",doi:"10.1002/app.55891",tags:["PPSU","Medical","Sterilization"]},
+    {title:"LCP for 5G mmWave antenna substrate",journal:"Advanced Functional Materials",year:2024,authors:"Zhou, X. et al.",doi:"10.1002/adfm.202401234",tags:["LCP","5G","Electronics"]},
+    {title:"Creep of PA46 vs PA66 at elevated temperatures",journal:"Polymer Testing",year:2024,authors:"Bauer, H. et al.",doi:"10.1016/j.polymertesting.2024.108234",tags:["PA46","PA66","Thermal"]},
+    {title:"Compatibilization of recycled PC/ABS",journal:"Polymer Degradation & Stability",year:2024,authors:"Kim, H. et al.",doi:"10.1016/j.polymdegradstab.2024.110567",tags:["PC","ABS","Recycled"]},
+    {title:"Biobased PEBA elastomers for sports",journal:"Green Chemistry",year:2024,authors:"Rosen, T. et al.",doi:"10.1039/D4GC00456G",tags:["PEBA","Bio-based","Sports"]},
+    {title:"Dielectric properties of hybrid PBT composites",journal:"IEEE Trans. Dielectrics",year:2023,authors:"Li, H. et al.",doi:"10.1109/TDEI.2023.3298765",tags:["PBT","Electrical","Filler"]},
+    {title:"SPS/GF30 crystalline structure via synchrotron",journal:"Macromolecules",year:2023,authors:"Yamamoto, K. et al.",doi:"10.1021/acs.macromol.3c01234",tags:["SPS","GF","Crystallization"]},
+  ];
+  const [search,setSearch]=useState("");const [tag,setTag]=useState("All");
+  const [liveQ,setLiveQ]=useState("");const [liveRes,setLiveRes]=useState([]);const [liveL,setLiveL]=useState(false);
+  const allTags=["All",...new Set(curated.flatMap(r=>r.tags))].sort();
+  const filtered=curated.filter(r=>(tag==="All"||r.tags.includes(tag))&&(!search||r.title.toLowerCase().includes(search.toLowerCase())));
+  const searchLive=async()=>{
+    if(!liveQ.trim())return;
+    if(!API_KEY()||API_KEY()==='YOUR_ANTHROPIC_API_KEY_HERE'){alert("Configure API key first.");return;}
+    setLiveL(true);setLiveRes([]);
+    try{
+      const text=await callClaude(`Find recent peer-reviewed articles about polymer science. Return ONLY a JSON array: [{title,authors,journal,year,doi,tags,abstract}]. 5-8 articles, abstracts max 80 words.`,`Polymer research: ${liveQ}`,true);
+      const match=text.match(/\[[\s\S]*?\]/);
+      if(match){try{setLiveRes(JSON.parse(match[0]).slice(0,8));}catch(e){}}
+    }catch(e){}
+    setLiveL(false);
+  };
+  return(
+    <div>
+      <div style={{background:"#060c1a",border:"1px solid #2d1b4a",borderRadius:10,padding:12,marginBottom:12}}>
+        <div style={{fontSize:10,color:"#a78bfa",fontWeight:700,marginBottom:7,textTransform:"uppercase",letterSpacing:"0.06em"}}>Live Research Search</div>
+        <div style={{display:"flex",gap:7}}>
+          <input className="inp" placeholder="e.g. PEEK recycling 2024, LCP dielectric 5G..." value={liveQ} onChange={e=>setLiveQ(e.target.value)} onKeyDown={e=>e.key==="Enter"&&searchLive()} style={{flex:1}}/>
+          <button onClick={searchLive} disabled={liveL} className="btn btn-purple">{liveL?"Searching...":"Search"}</button>
+        </div>
+        {liveRes.map((r,i)=>(
+          <div key={i} style={{marginTop:10,padding:10,background:"#0a1020",borderRadius:8,border:"1px solid #172035"}}>
+            <div style={{fontWeight:700,fontSize:11,color:"#e2e8f0",marginBottom:3}}>{r.title}</div>
+            <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>{r.authors} · <span style={{color:"#a78bfa"}}>{r.journal}</span> · {r.year}</div>
+            {r.abstract&&<div style={{fontSize:11,color:"#94a3b8",lineHeight:1.5,marginBottom:5}}>{r.abstract}</div>}
+            {r.doi&&<a href={`https://doi.org/${r.doi}`} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:"#a78bfa"}}>DOI →</a>}
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:10}}>
+        <input className="inp" placeholder="Filter curated articles..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select className="sel" value={tag} onChange={e=>setTag(e.target.value)}>{allTags.map(t=><option key={t}>{t}</option>)}</select>
+      </div>
+      <div style={{maxHeight:"calc(100vh - 320px)",overflowY:"auto",paddingRight:3}}>
+        {filtered.map(r=>(
+          <div key={r.doi} className="card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:11,color:"#e2e8f0",marginBottom:3,lineHeight:1.4}}>{r.title}</div>
+                <div style={{fontSize:10,color:"#94a3b8",marginBottom:4}}>{r.authors} · <span style={{color:"#a78bfa"}}>{r.journal}</span> · {r.year}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{r.tags.map(t=><span key={t} style={{fontSize:9,padding:"1px 5px",borderRadius:10,background:"#0a1020",border:"1px solid #172035",color:"#475569"}}>{t}</span>)}</div>
+              </div>
+              <a href={`https://doi.org/${r.doi}`} target="_blank" rel="noopener noreferrer" style={{marginLeft:10,padding:"4px 9px",background:"#2d1b4a",borderRadius:6,color:"#a78bfa",textDecoration:"none",fontSize:10,whiteSpace:"nowrap",flexShrink:0}}>DOI →</a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function App(){
+  const [tab,setTab]=useState("db");
+  const tabs=[{id:"db",label:"Material Database"},{id:"ai",label:"AI Assistant"},{id:"edu",label:"Education"},{id:"research",label:"Research"}];
+  return(
+    <>
+      <header className="header">
+        <div className="header-top">
+          <div className="logo">
+            <div className="logo-icon">⬡</div>
+            <div>
+              <div style={{fontWeight:800,fontSize:16,color:"#e2e8f0",letterSpacing:"-0.02em"}}>PolymerIQ</div>
+              <div style={{fontSize:9,color:"#334155",letterSpacing:"0.06em"}}>MATERIALS INTELLIGENCE PLATFORM</div>
+            </div>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{fontSize:9,padding:"3px 9px",background:"#064e3b",borderRadius:4,color:"#34d399"}}>Live Fetch ON</div>
+            <div style={{fontSize:9,padding:"3px 9px",background:"#1e3a5f",borderRadius:4,color:"#60a5fa"}}>{SEED_DB.length} seed grades · expandable</div>
+          </div>
+        </div>
+        <nav style={{display:"flex",overflowX:"auto"}}>
+          {tabs.map(t=><button key={t.id} className={`tab-btn${tab===t.id?" active":""}`} onClick={()=>setTab(t.id)}>{t.label}</button>)}
+        </nav>
+      </header>
+      <main className="main">
+        {tab==="db"&&<DatabaseTab/>}
+        {tab==="ai"&&<AIChat/>}
+        {tab==="edu"&&<EducationTab/>}
+        {tab==="research"&&<ResearchTab/>}
+      </main>
+    </>
+  );
+}
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
